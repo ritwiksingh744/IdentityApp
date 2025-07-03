@@ -1,71 +1,69 @@
 ﻿using IdentityApp.Data.Entity;
-using IdentityApp.Models;
-using IdentityApp.ViewModels;
+using IdentityApp.Models.Account;
+using IdentityApp.Services.Account;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
-using System.Threading.Tasks;
 
 namespace IdentityApp.Controllers
 {
     public class AccountController : Controller
     {
+        private readonly IAccountService _accountService;
         private readonly UserManager<User> _userManager;
-        private readonly SignInManager<User> _signInManager;
 
-        public AccountController(UserManager<User> userManager, SignInManager<User> signInManager)
+        public AccountController(IAccountService accountService, UserManager<User> userManager)
         {
+            _accountService = accountService;
             _userManager = userManager;
-            _signInManager = signInManager;
         }
 
-        // GET: /Account/Register
+        [AllowAnonymous]
         public IActionResult Register() => View();
 
+        [AllowAnonymous]
         [HttpPost]
         public async Task<IActionResult> Register(RegisterViewModel model)
         {
-            if (ModelState.IsValid)
-            {
-                var user = new User { UserName = model.Email, Email = model.Email };
-                var result = await _userManager.CreateAsync(user, model.Password);
-                if (result.Succeeded)
-                {
-                    await _signInManager.SignInAsync(user, isPersistent: false);
-                    return RedirectToAction("Index", "Home");
-                }
-                foreach (var error in result.Errors)
-                    ModelState.AddModelError("", error.Description);
-            }
+            if (!ModelState.IsValid) return View(model);
+
+            var result = await _accountService.RegisterAsync(model);
+            if (result.Succeeded)
+                return RedirectToAction("Login");
+
+            foreach (var error in result.Errors)
+                ModelState.AddModelError("", error.Description);
+
             return View(model);
         }
 
-        // GET: /Account/Login
+        [AllowAnonymous]
         public IActionResult Login() => View();
 
         [HttpPost]
+        [AllowAnonymous]
+        //[ValidateAntiForgeryToken]
         public async Task<IActionResult> Login(LoginViewModel model)
         {
-            if (ModelState.IsValid)
-            {
-                var result = await _signInManager.PasswordSignInAsync(
-                    model.Email, model.Password, model.RememberMe, false);
-                if (result.Succeeded)
-                    return RedirectToAction("Index", "Home");
+            if (!ModelState.IsValid) return View(model);
 
-                ModelState.AddModelError("", "Invalid login attempt.");
-            }
+            var result = await _accountService.LoginAsync(model);
+            if (result.Succeeded)
+                return RedirectToAction("Index", "Home");
+
+            ModelState.AddModelError("", "Invalid login attempt.");
             return View(model);
         }
 
-        // POST: /Account/Logout
+        [Authorize]
+        [ValidateAntiForgeryToken]
         [HttpPost]
         public async Task<IActionResult> Logout()
         {
-            await _signInManager.SignOutAsync();
+            await _accountService.LogoutAsync();
             return RedirectToAction("Index", "Home");
         }
 
-        // GET: /Account/ForgotPassword
         public IActionResult ForgotPassword() => View();
 
         [HttpPost]
@@ -73,21 +71,21 @@ namespace IdentityApp.Controllers
         {
             if (!ModelState.IsValid) return View(model);
 
-            var user = await _userManager.FindByEmailAsync(model.Email);
-            if (user == null) return RedirectToAction("ForgotPasswordConfirmation");
+            var token = await _accountService.GenerateResetTokenAsync(model);
+            if (token == null) return RedirectToAction("ForgotPasswordConfirmation");
 
-            var token = await _userManager.GeneratePasswordResetTokenAsync(user);
+            // TODO: Send email with this reset link
             var resetLink = Url.Action("ResetPassword", "Account",
-                new { token, email = user.Email }, Request.Scheme);
+                new { token, email = model.Email }, Request.Scheme);
 
-            // TODO: Send resetLink via email
+            // Log/Email this link for now
+            System.Diagnostics.Debug.WriteLine(resetLink);
 
             return RedirectToAction("ForgotPasswordConfirmation");
         }
 
         public IActionResult ForgotPasswordConfirmation() => View();
 
-        // GET: /Account/ResetPassword
         public IActionResult ResetPassword(string token, string email) =>
             View(new ResetPasswordViewModel { Token = token, Email = email });
 
@@ -96,10 +94,7 @@ namespace IdentityApp.Controllers
         {
             if (!ModelState.IsValid) return View(model);
 
-            var user = await _userManager.FindByEmailAsync(model.Email);
-            if (user == null) return RedirectToAction("ResetPasswordConfirmation");
-
-            var result = await _userManager.ResetPasswordAsync(user, model.Token, model.Password);
+            var result = await _accountService.ResetPasswordAsync(model);
             if (result.Succeeded)
                 return RedirectToAction("ResetPasswordConfirmation");
 
@@ -111,18 +106,18 @@ namespace IdentityApp.Controllers
 
         public IActionResult ResetPasswordConfirmation() => View();
 
-        // GET: /Account/ChangePassword
+        [Authorize]
         public IActionResult ChangePassword() => View();
 
         [HttpPost]
+        [Authorize]
         public async Task<IActionResult> ChangePassword(ChangePasswordViewModel model)
         {
             if (!ModelState.IsValid) return View(model);
 
-            var user = await _userManager.GetUserAsync(User);
-            if (user == null) return RedirectToAction("Login");
+            var userId = _userManager.GetUserId(User);
+            var result = await _accountService.ChangePasswordAsync(model, userId);
 
-            var result = await _userManager.ChangePasswordAsync(user, model.OldPassword, model.NewPassword);
             if (result.Succeeded)
                 return RedirectToAction("Index", "Home");
 

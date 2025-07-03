@@ -1,27 +1,68 @@
 using IdentityApp.Data;
 using IdentityApp.Data.Entity;
+using IdentityApp.Services.Account;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
+using Microsoft.AspNetCore.Mvc.Authorization;
 using Microsoft.EntityFrameworkCore;
 
 var builder = WebApplication.CreateBuilder(args);
 
 // Add services to the container.
-builder.Services.AddControllersWithViews();
+//builder.Services.AddControllersWithViews();
+builder.Services.AddControllersWithViews(options =>
+{
+    var policy = new AuthorizationPolicyBuilder()
+                    .RequireAuthenticatedUser()
+                    .Build();
+    options.Filters.Add(new AuthorizeFilter(policy));
+});
 
 builder.Services.AddDbContext<ProjDbContext>(option => option.UseSqlServer(builder.Configuration.GetConnectionString("Default")));
 
-builder.Services.AddIdentityCore<User>(options =>
+//builder.Services.AddIdentityCore<User>(options =>
+//{
+//    options.Password.RequireDigit = true;
+//    options.Password.RequiredLength = 6;
+//    options.Password.RequireNonAlphanumeric = false;
+//})
+//.AddRoles<IdentityRole>()
+//.AddEntityFrameworkStores<ProjDbContext>()
+//.AddUserManager<UserManager<User>>()
+//.AddRoleManager<RoleManager<IdentityRole>>()
+//.AddDefaultTokenProviders();
+
+builder.Services.AddIdentity<User, IdentityRole>(options =>
 {
     options.Password.RequireDigit = true;
     options.Password.RequiredLength = 6;
     options.Password.RequireNonAlphanumeric = false;
 })
-.AddRoles<IdentityRole>()
 .AddEntityFrameworkStores<ProjDbContext>()
-.AddUserManager<UserManager<User>>()
-.AddRoleManager<RoleManager<IdentityRole>>()
 .AddDefaultTokenProviders();
 
+
+
+builder.Services.ConfigureApplicationCookie(options =>
+{
+    options.LoginPath = "/Account/Login";
+    options.AccessDeniedPath = "/Account/AccessDenied";
+});
+
+
+//builder.Services.AddScoped<SignInManager<User>>();
+
+//register dependency
+builder.Services.AddScoped<IAccountService, AccountService>();
+
+//builder.Services.AddAuthentication(IdentityConstants.ApplicationScheme)
+//    .AddCookie(IdentityConstants.ApplicationScheme, options =>
+//    {
+//        options.LoginPath = "/Account/Login";
+//        options.AccessDeniedPath = "/Account/AccessDenied";
+//    });
+
+builder.Services.AddHttpContextAccessor();
 
 var app = builder.Build();
 
@@ -45,9 +86,10 @@ if (!app.Environment.IsDevelopment())
 app.UseHttpsRedirection();
 app.UseRouting();
 
-app.UseAuthorization();
+
 
 app.MapStaticAssets();
+app.UseAuthentication();
 
 app.MapControllerRoute(
     name: "default",
@@ -55,4 +97,6 @@ app.MapControllerRoute(
     .WithStaticAssets();
 
 
+
+app.UseAuthorization();
 app.Run();
