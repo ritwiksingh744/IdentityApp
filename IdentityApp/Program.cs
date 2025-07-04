@@ -1,5 +1,6 @@
 using IdentityApp.Data;
 using IdentityApp.Data.Entity;
+using IdentityApp.Data.Repository;
 using IdentityApp.Services.Account;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
@@ -54,7 +55,7 @@ builder.Services.ConfigureApplicationCookie(options =>
 
 //register dependency
 builder.Services.AddScoped<IAccountService, AccountService>();
-
+builder.Services.AddScoped(typeof(IGenericRepository<>), typeof(GenericRepository<>));
 //builder.Services.AddAuthentication(IdentityConstants.ApplicationScheme)
 //    .AddCookie(IdentityConstants.ApplicationScheme, options =>
 //    {
